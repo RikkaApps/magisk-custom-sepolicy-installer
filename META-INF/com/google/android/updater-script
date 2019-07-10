@@ -1,0 +1,105 @@
+#MAGISK
+##########################################################################################
+#
+# Magisk Flash Script
+# by topjohnwu
+#
+# This script will detect, construct the environment for Magisk
+# It will then call boot_patch.sh to patch the boot image
+#
+##########################################################################################
+
+##########################################################################################
+# Preparation
+##########################################################################################
+
+COMMONDIR=$INSTALLER/common
+CHROMEDIR=$INSTALLER/chromeos
+
+# Default permissions
+umask 022
+
+OUTFD=$2
+ZIP=$3
+
+if [ ! -f $COMMONDIR/util_functions.sh ]; then
+  echo "! Unable to extract zip file!"
+  exit 1
+fi
+
+# Load utility fuctions
+. $COMMONDIR/util_functions.sh
+
+setup_flashable
+
+##########################################################################################
+# Detection
+##########################################################################################
+
+ui_print "*****************************************"
+ui_print "* Magisk Custom SELinux Policy Installer "
+ui_print "*****************************************"
+
+is_mounted /data || mount /data || is_mounted /cache || mount /cache || is_mounted /system || mount /system
+mount_partitions
+check_data
+get_flags
+find_boot_image
+
+[ -z $BOOTIMAGE ] && abort "! Unable to detect target image"
+ui_print "- Target image: $BOOTIMAGE"
+
+# Detect version and architecture		
+api_level_arch_detect
+
+ui_print "- Device platform: $ARCH"
+
+BINDIR=$INSTALLER/$ARCH32
+chmod -R 755 $CHROMEDIR $BINDIR
+
+##########################################################################################
+# Environment
+##########################################################################################
+
+ui_print "- Constructing environment"
+
+# Copy required files
+mv $BINDIR/* $COMMONDIR/* $CHROMEDIR $BBDIR/busybox $INSTALLER/
+chmod -R 755 $INSTALLER
+
+$BOOTMODE || recovery_actions
+
+##########################################################################################
+# Boot patching
+##########################################################################################
+
+eval $BOOTSIGNER -verify < $BOOTIMAGE && BOOTSIGNED=true
+$BOOTSIGNED && ui_print "- Boot image is signed with AVB 1.0"
+
+SOURCEDMODE=true
+cd $INSTALLER
+
+$IS64BIT && mv -f magiskpolicy64 magiskpolicy || rm -f magiskpolicy64
+
+# Source the boot patcher
+. ./boot_patch.sh "$BOOTIMAGE"
+
+ui_print "- Flashing new boot image"
+
+if ! flash_image new-boot.img "$BOOTIMAGE"; then
+  ui_print "- Compressing ramdisk to fit in partition"
+  ./magiskboot cpio ramdisk.cpio compress
+  ./magiskboot repack "$BOOTIMAGE"
+  flash_image new-boot.img "$BOOTIMAGE" || abort "! Insufficient partition size"
+fi
+
+./magiskboot cleanup
+rm -f new-boot.img
+
+cd /
+# Cleanups
+$BOOTMODE || recovery_cleanup
+rm -rf $TMPDIR
+
+ui_print "- Done"
+exit 0
