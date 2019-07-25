@@ -81,6 +81,10 @@ cd $INSTALLER
 
 $IS64BIT && mv -f magiskpolicy64 magiskpolicy || rm -f magiskpolicy64
 
+[ ! -f ./install.sh ] && abort "! Missing install.sh!"
+. ./install.sh
+print_modname
+
 # Source the boot patcher
 . ./boot_patch.sh "$BOOTIMAGE"
 

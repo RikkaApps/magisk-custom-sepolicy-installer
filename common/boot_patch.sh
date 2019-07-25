@@ -97,11 +97,7 @@ esac
 
 ui_print "- Patching ramdisk"
 
-while read -r LINE || [ -n "$LINE" ]; do
-    [ -z $LINE ] && continue
-    ui_print "- Custom policy: $LINE"
-    ./magiskpolicy --load ./sepolicy_custom --save ./sepolicy_custom "$LINE"
-done < ./policies.txt
+patch_policy
 
 ./magiskboot cpio ramdisk.cpio \
 "add 644 sepolicy_custom sepolicy_custom"
